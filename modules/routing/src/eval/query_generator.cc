@@ -65,6 +65,8 @@ struct generator_settings : public conf::configuration {
       return Start_OntripStationStart;
     } else if (query_type_ == "ontrip_train") {
       return Start_OntripTrainStart;
+    } else if (query_type_ == "profile") {
+      return Start_Profile;
     } else {
       throw std::runtime_error{"start type not supported"};
     }
