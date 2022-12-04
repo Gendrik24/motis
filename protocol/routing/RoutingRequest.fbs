@@ -73,10 +73,18 @@ table PretripStart {
   extend_interval_later:bool;
 }
 
+table ProfileStart {
+  station:InputStation;
+  start_time:long;
+  end_time:long;
+  min_connection_count:uint;
+}
+
 union Start {
   OntripTrainStart,
   OntripStationStart,
-  PretripStart
+  PretripStart,
+  ProfileStart
 }
 
 // ----------------------------------------------------------------------------

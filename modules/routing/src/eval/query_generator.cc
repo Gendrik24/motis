@@ -66,7 +66,7 @@ struct generator_settings : public conf::configuration {
     } else if (query_type_ == "ontrip_train") {
       return Start_OntripTrainStart;
     } else if (query_type_ == "profile") {
-      return Start_Profile;
+      return Start_ProfileStart;
     } else {
       throw std::runtime_error{"start type not supported"};
     }
@@ -175,6 +175,31 @@ std::string query_pretrip(std::string const& target, int id,
                              CreateInputStation(fbb, fbb.CreateString(from_eva),
                                                 fbb.CreateString("")),
                              &interval)
+              .Union(),
+          CreateInputStation(fbb, fbb.CreateString(to_eva),
+                             fbb.CreateString("")),
+          SearchType_Default, dir, fbb.CreateVector(std::vector<Offset<Via>>()),
+          fbb.CreateVector(std::vector<Offset<AdditionalEdgeWrapper>>()))
+          .Union(),
+      target, DestinationType_Module, id);
+
+  return msg_ptr_to_json(make_msg(fbb));
+}
+
+std::string query_profile(std::string const& target, int id,
+                            std::string const& from_eva,
+                            std::string const& to_eva, SearchDir const dir, schedule const& sched) {
+  message_creator fbb;
+
+  fbb.create_and_finish(
+      MsgContent_RoutingRequest,
+      CreateRoutingRequest(
+          fbb, Start_ProfileStart,
+          CreateProfileStart(fbb,
+                             CreateInputStation(fbb, fbb.CreateString(from_eva),
+                                                fbb.CreateString("")),
+                                                external_schedule_begin(sched),
+                                                external_schedule_end(sched))
               .Union(),
           CreateInputStation(fbb, fbb.CreateString(to_eva),
                              fbb.CreateString("")),
@@ -474,6 +499,14 @@ int generate(int argc, char const** argv) {
                                         SearchDir_Forward, sched)
                   << '\n';
           out_bwd << query_ontrip_train(target, evas.second, trip_stop, i, trip,
+                                        SearchDir_Backward, sched)
+                  << '\n';
+        } break;
+        case Start_ProfileStart: {
+          out_fwd << query_profile(target, i, evas.first, evas.second,
+                                        SearchDir_Forward, sched)
+                  << '\n';
+          out_bwd << query_profile(target, i, evas.first, evas.second,
                                         SearchDir_Backward, sched)
                   << '\n';
         } break;
