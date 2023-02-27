@@ -2,6 +2,7 @@
 #include <iostream>
 #include <memory>
 #include <thread>
+#include <string>
 
 #include "boost/asio/deadline_timer.hpp"
 #include "boost/asio/io_service.hpp"
@@ -101,7 +102,7 @@ int main(int argc, char const** argv) {
     instance.init_remotes(remote_opt.get_remotes());
 
     if (!launcher_opt.init_.empty()) {
-      if (launcher_opt.init_.starts_with(".") &&
+      if (launcher_opt.init_[0] == '.' &&
           std::filesystem::is_regular_file(launcher_opt.init_)) {
         std::ifstream in{launcher_opt.init_};
         std::string json;

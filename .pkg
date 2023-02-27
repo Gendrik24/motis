@@ -4,8 +4,8 @@
   commit=b6b5e60faac2921f1c0b3813da9c11731a3ca31d
 [cista]
   url=git@github.com:felixguendling/cista.git
-  branch=nigiri
-  commit=8a307860f7d01ff8d303e4291b46ff2cda4ae0a8
+  branch=master
+  commit=4ff6f5add8c7dfb1e93f0c4c5d6a4c139f233366
 [conf]
   url=git@github.com:motis-project/conf.git
   branch=master
@@ -97,7 +97,7 @@
 [nigiri]
   url=git@github.com:Gendrik24/nigiri.git
   branch=master-profile
-  commit=ad74cd8c16e06f6254846bbd62c4533a5d67932f
+  commit=8508d7ab4b87c6ad5af490d9928f94717b2d99cd
 [osmium]
   url=git@github.com:motis-project/libosmium.git
   branch=master

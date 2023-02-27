@@ -57,7 +57,10 @@ endif()
 add_library(motis-generated INTERFACE)
 target_include_directories(motis-generated INTERFACE ${CMAKE_BINARY_DIR}/generated)
 
-set(USE_OPENMP OFF CACHE BOOL openmp FORCE)
+set(USE_OPENMP ON CACHE BOOL openmp FORCE)
+if (USE_OPENMP)
+  find_package(OpenMP)
+endif()
 
 
 ################################

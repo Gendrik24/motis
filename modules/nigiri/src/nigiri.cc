@@ -39,6 +39,11 @@ void nigiri::init(motis::module::registry& reg) {
                     return route(impl_->tags_, **impl_->tt_, msg);
                   },
                   {});
+  reg.register_op("/nigiri/bmcr",
+                  [&](mm::msg_ptr const& msg) {
+                    return route_bmc_raptor(impl_->tags_, **impl_->tt_, msg);
+                  },
+                  {});
 }
 
 void nigiri::import(motis::module::import_dispatcher& reg) {
