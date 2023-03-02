@@ -126,7 +126,7 @@ int analyze_results(int argc, char const** argv) {
   bool include_empty = false;
   bool long_output = false;
   int top = 0;
-  std::string filename = "results.txt";
+  std::vector<std::string> filenames;
   std::vector<std::string> filtered_categories;
 
   po::options_description desc("Options:");
@@ -136,7 +136,7 @@ int analyze_results(int argc, char const** argv) {
       ("long,l", po::bool_switch(&long_output), "long output")
       ("include-empty,e", po::bool_switch(&include_empty),
        "include results without connections")
-      ("file,f", po::value<std::string>(&filename)->default_value(filename),
+      ("file,f", po::value<std::vector<std::string>>(&filenames)->multitoken()->default_value({"results.txt"}, "results.txt"),
        "results.txt filename")
       ("category,c", po::value<std::vector<std::string>>(&filtered_categories),
        "only print selected categories")
@@ -165,64 +165,66 @@ int analyze_results(int argc, char const** argv) {
   std::map<std::string, category> categories;
   stat connection_count;
 
-  std::ifstream in(filename);
-  std::string line;
-
   uint64_t total_count = 0;
   uint64_t count = 0;
   uint64_t no_con_count = 0;
   uint64_t invalid = 0;
 
-  while (in.peek() != EOF && !in.eof()) {
-    std::getline(in, line);
+  for (const auto& filename : filenames) {
+    std::ifstream in(filename);
+    std::string line;
 
-    auto const res_msg = make_msg(line);
-    if (res_msg->get()->content_type() != MsgContent_RoutingResponse) {
-      ++invalid;
-      continue;
-    }
-    auto const res = motis_content(RoutingResponse, res_msg);
+    while (in.peek() != EOF && !in.eof()) {
+      std::getline(in, line);
 
-    const auto cc = res->connections()->size();
-    connection_count.add(res_msg->id(), cc);
-    ++total_count;
-
-    if (cc == 0) {
-      ++no_con_count;
-      if (!include_empty) {
+      auto const res_msg = make_msg(line);
+      if (res_msg->get()->content_type() != MsgContent_RoutingResponse) {
+        ++invalid;
         continue;
       }
-    }
+      auto const res = motis_content(RoutingResponse, res_msg);
 
-    for (auto const& rc : *res->statistics()) {
-      auto& cat = utl::get_or_create(categories, rc->category()->str(), [&]() {
-        return category{rc->category()->str()};
-      });
-      for (auto const& rs : *rc->entries()) {
-        auto& s = utl::get_or_create(cat.stats_, rs->name()->str(), [&]() {
-          return stat(rs->name()->str(), count);
-        });
-        s.add(res_msg->id(), rs->value());
-      }
-    }
+      const auto cc = res->connections()->size();
+      connection_count.add(res_msg->id(), cc);
+      ++total_count;
 
-    for (auto& c : categories) {
-      auto const rc = res->statistics()->LookupByKey(c.first.c_str());
-      if (rc == nullptr) {
-        for (auto& s : c.second.stats_) {
-          s.second.add(res_msg->id(), 0);
+      if (cc == 0) {
+        ++no_con_count;
+        if (!include_empty) {
+          continue;
         }
-      } else {
-        for (auto& s : c.second.stats_) {
-          auto const rs = rc->entries()->LookupByKey(s.first.c_str());
-          if (rs == nullptr) {
+      }
+
+      for (auto const& rc : *res->statistics()) {
+        auto& cat = utl::get_or_create(categories, rc->category()->str(), [&]() {
+          return category{rc->category()->str()};
+        });
+        for (auto const& rs : *rc->entries()) {
+          auto& s = utl::get_or_create(cat.stats_, rs->name()->str(), [&]() {
+            return stat(rs->name()->str(), count);
+          });
+          s.add(res_msg->id(), rs->value());
+        }
+      }
+
+      for (auto& c : categories) {
+        auto const rc = res->statistics()->LookupByKey(c.first.c_str());
+        if (rc == nullptr) {
+          for (auto& s : c.second.stats_) {
             s.second.add(res_msg->id(), 0);
+          }
+        } else {
+          for (auto& s : c.second.stats_) {
+            auto const rs = rc->entries()->LookupByKey(s.first.c_str());
+            if (rs == nullptr) {
+              s.second.add(res_msg->id(), 0);
+            }
           }
         }
       }
-    }
 
-    ++count;
+      ++count;
+    }
   }
 
   if (categories.empty()) {
