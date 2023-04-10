@@ -14,6 +14,7 @@
 #include "nigiri/routing/raptor.h"
 #include "nigiri/routing/bmc_raptor.h"
 #include "nigiri/routing/search_state.h"
+#include "nigiri/routing/mc_raptor.h"
 #include "nigiri/special_stations.h"
 #include "nigiri/types.h"
 
@@ -30,7 +31,8 @@ namespace fbs = flatbuffers;
 
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 boost::thread_specific_ptr<n::routing::search_state> search_state;
-boost::thread_specific_ptr<n::routing::bmc_raptor_search_state> profile_search_state;
+boost::thread_specific_ptr<n::routing::bmc_raptor_search_state> bmc_raptor_search_state;
+boost::thread_specific_ptr<n::routing::mc_raptor_search_state> mc_raptor_search_state;
 
 namespace motis::nigiri {
 
@@ -141,6 +143,60 @@ mm::msg_ptr to_routing_response_bmc_raptor(
   return make_msg(fbb);
 }
 
+mm::msg_ptr to_routing_response_mc_raptor(
+    n::timetable const& tt, std::vector<std::string> const& tags,
+    n::pareto_set<n::routing::journey> const& journeys,
+    n::interval<n::unixtime_t> search_interval,
+    n::routing::mc_raptor_stats const& stats) {
+  mm::message_creator fbb;
+  MOTIS_START_TIMING(conversion);
+  auto const connections =
+      utl::to_vec(journeys, [&](n::routing::journey const& j) {
+        return to_connection(fbb, nigiri_to_motis_journey(tt, tags, j));
+      });
+  MOTIS_STOP_TIMING(conversion);
+  std::vector<fbs::Offset<Statistics>> statistics{CreateStatistics(
+      fbb, fbb.CreateString("nigiri.mc.raptor"),
+      fbb.CreateVector(std::vector<fbs::Offset<StatisticsEntry>>{
+          CreateStatisticsEntry(fbb, fbb.CreateString("routing_time_ms"),
+                                stats.n_routing_time_),
+          CreateStatisticsEntry(fbb, fbb.CreateString("lower_bounds_time_ms"),
+                                stats.lb_time_),
+          CreateStatisticsEntry(fbb, fbb.CreateString("footpaths_visited"),
+                                stats.n_footpaths_visited_),
+          CreateStatisticsEntry(fbb, fbb.CreateString("routes_visited"),
+                                stats.n_routes_visited_),
+          CreateStatisticsEntry(fbb, fbb.CreateString("earliest_trip_calls"),
+                                stats.n_earliest_trip_calls_),
+          CreateStatisticsEntry(
+              fbb, fbb.CreateString("earliest_arrival_updated_by_route"),
+              stats.n_earliest_arrival_updated_by_route_),
+          CreateStatisticsEntry(
+              fbb, fbb.CreateString("earliest_arrival_updated_by_footpath"),
+              stats.n_earliest_arrival_updated_by_footpath_),
+          CreateStatisticsEntry(
+              fbb, fbb.CreateString("reconstruction_time_ms"),
+              stats.n_reconstruction_time),
+          CreateStatisticsEntry(
+              fbb, fbb.CreateString("fp_update_prevented_by_lower_bound"),
+              stats.fp_update_prevented_by_lower_bound_),
+          CreateStatisticsEntry(
+              fbb, fbb.CreateString("route_update_prevented_by_lower_bound"),
+              stats.route_update_prevented_by_lower_bound_),
+          CreateStatisticsEntry(fbb, fbb.CreateString("conversion"),
+                                MOTIS_TIMING_MS(conversion))}))};
+  fbb.create_and_finish(
+      MsgContent_RoutingResponse,
+      routing::CreateRoutingResponse(
+          fbb, fbb.CreateVectorOfSortedTables(&statistics),
+          fbb.CreateVector(connections),
+          to_motis_unixtime(search_interval.from_),
+          to_motis_unixtime(search_interval.to_ - std::chrono::minutes{1}),
+          fbb.CreateVector(std::vector<fbs::Offset<DirectConnection>>{}))
+          .Union());
+  return make_msg(fbb);
+}
+
 std::vector<n::routing::offset> get_offsets(
     std::vector<std::string> const& tags, n::timetable const& tt,
     fbs::Vector<fbs::Offset<motis::routing::AdditionalEdgeWrapper>> const*
@@ -188,20 +244,29 @@ n::routing::stats run_search(n::routing::search_state& state,
   return stats;
 }
 
-n::routing::bmc_raptor_stats run_profile_search(n::routing::bmc_raptor_search_state& state,
-                                     n::timetable const& tt, n::routing::query&& q) {
+n::routing::bmc_raptor_stats run_bmc_raptor_search(n::routing::bmc_raptor_search_state& state,
+                                                   n::timetable const& tt, n::routing::query&& q) {
   auto r =
       n::routing::bmc_raptor{tt, state, std::move(q)};
   r.route();
   return r.stats_;
 }
 
-motis::module::msg_ptr route_bmc_raptor(std::vector<std::string> const& tags,
+n::routing::mc_raptor_stats run_mc_raptor_search(n::routing::mc_raptor_search_state& state,
+                                                  n::timetable const& tt, n::routing::query&& q) {
+  auto r =
+      n::routing::mc_raptor{tt, state, std::move(q)};
+  r.route();
+  return r.stats_;
+}
+
+motis::module::msg_ptr route_mc_raptor(std::vector<std::string> const& tags,
                                         ::nigiri::timetable& tt,
-                                        motis::module::msg_ptr const& msg) {
+                                        motis::module::msg_ptr const& msg,
+                                        const bool use_bitsets) {
   using motis::routing::RoutingRequest;
   auto const req = motis_content(RoutingRequest, msg);
-  fmt::print("id={}\n", msg->id());
+  fmt::print("id={}, use bitsets{}\n", msg->id(), use_bitsets);
 
   auto start_time = n::routing::start_time_t{};
   auto start_station = n::location_idx_t::invalid();
@@ -256,22 +321,37 @@ motis::module::msg_ptr route_bmc_raptor(std::vector<std::string> const& tags,
   utl::verify(!q.start_.empty(), "no start edges");
   utl::verify(!q.destinations_[0].empty(), "no destination edges");
 
-  if (profile_search_state.get() == nullptr) {
-    profile_search_state.reset(new n::routing::bmc_raptor_search_state{});
+  if (use_bitsets && bmc_raptor_search_state.get() == nullptr) {
+    bmc_raptor_search_state.reset(new n::routing::bmc_raptor_search_state{});
+  } else if (!use_bitsets && mc_raptor_search_state.get() == nullptr) {
+    mc_raptor_search_state.reset(new n::routing::mc_raptor_search_state{});
+  }
+
+  if (use_bitsets) {
+    MOTIS_START_TIMING(routing);
+    n::routing::bmc_raptor_stats stats;
+    if (req->search_dir() == SearchDir_Forward) {
+      stats = run_bmc_raptor_search(*bmc_raptor_search_state, tt, std::move(q));
+    } else {
+      utl::fail("Backward queries not supported!");
+    }
+    MOTIS_STOP_TIMING(routing);
+    stats.n_routing_time_ = MOTIS_TIMING_MS(routing);
+    return to_routing_response_bmc_raptor(tt, tags, bmc_raptor_search_state->results_.at(0),
+                                          bmc_raptor_search_state->search_interval_, stats);
   }
 
   MOTIS_START_TIMING(routing);
-  n::routing::bmc_raptor_stats stats;
+  n::routing::mc_raptor_stats stats;
   if (req->search_dir() == SearchDir_Forward) {
-        stats = run_profile_search(*profile_search_state, tt, std::move(q));
+    stats = run_mc_raptor_search(*mc_raptor_search_state, tt, std::move(q));
   } else {
     utl::fail("Backward queries not supported!");
   }
   MOTIS_STOP_TIMING(routing);
   stats.n_routing_time_ = MOTIS_TIMING_MS(routing);
-
-    return to_routing_response_bmc_raptor(tt, tags, profile_search_state->results_.at(0),
-                                        profile_search_state->search_interval_, stats);
+  return to_routing_response_mc_raptor(tt, tags, mc_raptor_search_state->results_.at(0),
+                                        mc_raptor_search_state->search_interval_, stats);
 }
 
 motis::module::msg_ptr route(std::vector<std::string> const& tags,
