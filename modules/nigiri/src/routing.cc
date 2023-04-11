@@ -279,6 +279,19 @@ motis::module::msg_ptr route_mc_raptor(std::vector<std::string> const& tags,
         to_nigiri_unixtime(start->end_time())};
 
     start_station = get_location_idx(tags, tt, start->station()->id()->str());
+  } else if (req->start_type() == routing::Start_PretripStart) {
+    auto const start = reinterpret_cast<routing::PretripStart const*>(req->start());
+
+    utl::verify(start->min_connection_count() == 0U &&
+                    !start->extend_interval_earlier() &&
+                    !start->extend_interval_later(),
+                "nigiri currently does not support interval extension");
+
+    start_time = n::interval<n::unixtime_t>{
+        to_nigiri_unixtime(start->interval()->begin()),
+        to_nigiri_unixtime(start->interval()->end()) + std::chrono::minutes{1}};
+
+    start_station = get_location_idx(tags, tt, start->station()->id()->str());
   } else {
     throw utl::fail("bmc_raptor only supports Profile Starts");
   }
