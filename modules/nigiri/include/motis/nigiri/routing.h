@@ -5,6 +5,8 @@
 
 #include "motis/module/message.h"
 
+#include "nigiri/types.h"
+
 namespace nigiri {
 struct timetable;
 }
@@ -18,6 +20,7 @@ motis::module::msg_ptr route(std::vector<std::string> const& tags,
 motis::module::msg_ptr route_mc_raptor(std::vector<std::string> const& tags,
                                         ::nigiri::timetable& tt,
                                         motis::module::msg_ptr const& msg,
-                                        const bool use_bitsets);
+                                        const bool use_bitsets,
+                                        ::nigiri::criteria criteria);
 
 }  // namespace motis::nigiri

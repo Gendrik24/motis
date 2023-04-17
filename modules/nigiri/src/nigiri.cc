@@ -41,12 +41,22 @@ void nigiri::init(motis::module::registry& reg) {
                   {});
   reg.register_op("/nigiri/bmcr",
                   [&](mm::msg_ptr const& msg) {
-                    return route_mc_raptor(impl_->tags_, **impl_->tt_, msg, true);
+                    return route_mc_raptor(impl_->tags_, **impl_->tt_, msg, true, n::criteria::biCriteria);
                   },
                   {});
   reg.register_op("/nigiri/mcr",
                   [&](mm::msg_ptr const& msg) {
-                    return route_mc_raptor(impl_->tags_, **impl_->tt_, msg, false);
+                    return route_mc_raptor(impl_->tags_, **impl_->tt_, msg, false, n::criteria::biCriteria);
+                  },
+                  {});
+  reg.register_op("/nigiri/bmcr/multi",
+                  [&](mm::msg_ptr const& msg) {
+                    return route_mc_raptor(impl_->tags_, **impl_->tt_, msg, true, n::criteria::multiCriteria);
+                  },
+                  {});
+  reg.register_op("/nigiri/mcr/multi",
+                  [&](mm::msg_ptr const& msg) {
+                    return route_mc_raptor(impl_->tags_, **impl_->tt_, msg, false, n::criteria::multiCriteria);
                   },
                   {});
 }

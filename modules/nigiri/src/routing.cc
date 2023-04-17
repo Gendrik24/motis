@@ -245,25 +245,38 @@ n::routing::stats run_search(n::routing::search_state& state,
 }
 
 n::routing::bmc_raptor_stats run_bmc_raptor_search(n::routing::bmc_raptor_search_state& state,
-                                                   n::timetable const& tt, n::routing::query&& q) {
+                                                   n::timetable const& tt, n::routing::query&& q, n::criteria criteria) {
+  if (criteria == n::criteria::multiCriteria) {
+    auto r =
+        n::routing::bmc_raptor<n::criteria::multiCriteria>{tt, state, std::move(q)};
+    r.route();
+    return r.get_stats();
+  }
   auto r =
-      n::routing::bmc_raptor{tt, state, std::move(q)};
+      n::routing::bmc_raptor<n::criteria::biCriteria>{tt, state, std::move(q)};
   r.route();
-  return r.stats_;
+  return r.get_stats();
 }
 
 n::routing::mc_raptor_stats run_mc_raptor_search(n::routing::mc_raptor_search_state& state,
-                                                  n::timetable const& tt, n::routing::query&& q) {
+                                                  n::timetable const& tt, n::routing::query&& q, n::criteria criteria) {
+  if (criteria == n::criteria::multiCriteria) {
+    auto r =
+        n::routing::mc_raptor<n::criteria::multiCriteria>{tt, state, std::move(q)};
+    r.route();
+    return r.get_stats();
+  }
   auto r =
-      n::routing::mc_raptor{tt, state, std::move(q)};
+      n::routing::mc_raptor<n::criteria::biCriteria>{tt, state, std::move(q)};
   r.route();
-  return r.stats_;
+  return r.get_stats();
 }
 
 motis::module::msg_ptr route_mc_raptor(std::vector<std::string> const& tags,
                                         ::nigiri::timetable& tt,
                                         motis::module::msg_ptr const& msg,
-                                        const bool use_bitsets) {
+                                        const bool use_bitsets,
+                                        n::criteria criteria) {
   using motis::routing::RoutingRequest;
   auto const req = motis_content(RoutingRequest, msg);
   fmt::print("id={}, use bitsets{}\n", msg->id(), use_bitsets);
@@ -344,7 +357,7 @@ motis::module::msg_ptr route_mc_raptor(std::vector<std::string> const& tags,
     MOTIS_START_TIMING(routing);
     n::routing::bmc_raptor_stats stats;
     if (req->search_dir() == SearchDir_Forward) {
-      stats = run_bmc_raptor_search(*bmc_raptor_search_state, tt, std::move(q));
+      stats = run_bmc_raptor_search(*bmc_raptor_search_state, tt, std::move(q), criteria);
     } else {
       utl::fail("Backward queries not supported!");
     }
@@ -357,7 +370,7 @@ motis::module::msg_ptr route_mc_raptor(std::vector<std::string> const& tags,
   MOTIS_START_TIMING(routing);
   n::routing::mc_raptor_stats stats;
   if (req->search_dir() == SearchDir_Forward) {
-    stats = run_mc_raptor_search(*mc_raptor_search_state, tt, std::move(q));
+    stats = run_mc_raptor_search(*mc_raptor_search_state, tt, std::move(q), criteria);
   } else {
     utl::fail("Backward queries not supported!");
   }
