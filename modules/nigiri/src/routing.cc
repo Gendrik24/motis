@@ -129,6 +129,9 @@ mm::msg_ptr to_routing_response_bmc_raptor(
           CreateStatisticsEntry(
               fbb, fbb.CreateString("route_update_prevented_by_lower_bound"),
               stats.route_update_prevented_by_lower_bound_),
+          CreateStatisticsEntry(
+              fbb, fbb.CreateString("max_round_arrival_labels_"),
+              stats.max_round_arrival_labels_),
           CreateStatisticsEntry(fbb, fbb.CreateString("conversion"),
                                 MOTIS_TIMING_MS(conversion))}))};
   fbb.create_and_finish(
@@ -183,6 +186,9 @@ mm::msg_ptr to_routing_response_mc_raptor(
           CreateStatisticsEntry(
               fbb, fbb.CreateString("route_update_prevented_by_lower_bound"),
               stats.route_update_prevented_by_lower_bound_),
+          CreateStatisticsEntry(
+              fbb, fbb.CreateString("max_round_arrival_labels_"),
+              stats.max_round_arrival_labels_),
           CreateStatisticsEntry(fbb, fbb.CreateString("conversion"),
                                 MOTIS_TIMING_MS(conversion))}))};
   fbb.create_and_finish(
