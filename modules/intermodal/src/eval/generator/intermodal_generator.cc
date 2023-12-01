@@ -1,3 +1,6 @@
+#include <date/date.h>
+#include <date/tz.h>
+#include <chrono>
 #include "motis/intermodal/eval/commands.h"
 
 #include <filesystem>
@@ -6,6 +9,7 @@
 #include <memory>
 #include <random>
 #include <regex>
+#include <sstream>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -31,6 +35,7 @@
 #include "motis/core/schedule/time.h"
 #include "motis/core/access/time_access.h"
 #include "motis/core/access/trip_iterator.h"
+#include "motis/core/common/date_time_util.h"
 #include "motis/module/message.h"
 #include "motis/bootstrap/dataset_settings.h"
 #include "motis/bootstrap/motis_instance.h"
@@ -76,6 +81,8 @@ struct generator_settings : public conf::configuration {
     param(extend_later_, "extend_later", "extend search interval later");
     param(min_connection_count_, "min_connection_count",
           "min. number of connections (otherwise interval will be extended)");
+    param(search_start_, "search_start", "Search intervals will be later than search_start");
+    param(search_end_, "search_end", "Search intervals will be earlier than search_end");
   }
 
   MsgContent get_message_type() const {
@@ -134,6 +141,8 @@ struct generator_settings : public conf::configuration {
   bool extend_earlier_{false};
   bool extend_later_{false};
   unsigned min_connection_count_{0U};
+  std::string search_start_;
+  std::string search_end_;
 };
 
 std::string replace_target_escape(std::string const& str,
@@ -271,7 +280,7 @@ private:
       int const h = hour % 24;
       v.push_back(prob[h]);  // NOLINT
     }
-    return {std::begin(v), std::end(v)};
+    return {std::begin(v), std::end(v)}; 
   }
 
   unixtime begin_;
@@ -771,6 +780,8 @@ int generate(int argc, char const** argv) {
   auto const start_type = generator_opt.get_start_type();
   auto const dest_type = generator_opt.get_dest_type();
   auto const message_type = generator_opt.get_message_type();
+  auto const search_start_s = generator_opt.search_start_;
+  auto const search_end_s = generator_opt.search_end_;
 
   utl::verify(generator_opt.dest_type_ == "coordinate" ||
                   generator_opt.dest_type_ == "station",
@@ -792,13 +803,31 @@ int generate(int argc, char const** argv) {
         return std::ofstream{replace_target_escape(generator_opt.out_, router)};
       });
 
-  motis_instance instance;
-  instance.import(module_settings{}, dataset_opt, import_opt);
 
+  motis_instance instance;
+  instance.import(module_settings{}, dataset_opt, import_opt); 
   auto const& sched = instance.sched();
-  search_interval_generator interval_gen(
-      sched.schedule_begin_ + SCHEDULE_OFFSET_MINUTES * 60,
-      sched.schedule_end_ - 5 * 60 * 60);
+
+  unixtime search_schedule_begin = sched.schedule_begin_ + SCHEDULE_OFFSET_MINUTES * 60;
+  unixtime search_schedule_end = sched.schedule_end_ - 5 * 60 * 60;
+
+  if (!search_start_s.empty()) {
+    const unixtime search_begin = parse_unix_time(search_start_s, "%Y-%m-%d %H:%M %Z");
+    if (search_begin < search_schedule_begin) {
+      throw utl::fail("The search begin must be contained in the schedule!");
+    }
+    search_schedule_begin = search_begin;
+  }
+
+  if (!search_end_s.empty()) {
+    const unixtime search_end = parse_unix_time(search_end_s, "%Y-%m-%d %H:%M %Z");
+    if (search_end > search_schedule_end) {
+      throw utl::fail("The search end must be contained in the schedule!");
+    }
+    search_schedule_end = search_end;
+  }
+ 
+  search_interval_generator interval_gen(search_schedule_begin, search_schedule_end);
   point_generator point_gen(bds.get());
 
   std::vector<station_node const*> station_nodes;
