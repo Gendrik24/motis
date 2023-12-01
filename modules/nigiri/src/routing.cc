@@ -133,12 +133,12 @@ auto run_search(n::routing::search_state& search_state,
   if (rtt == nullptr) {
     using algo_t = n::routing::raptor<SearchDir, false>;
     return n::routing::search<SearchDir, algo_t>{tt, nullptr, search_state,
-                                                 raptor_state, std::move(q)}
+                                                 raptor_state, std::move(q), false}
         .execute();
   } else {
     using algo_t = n::routing::raptor<SearchDir, true>;
     return n::routing::search<SearchDir, algo_t>{tt, rtt, search_state,
-                                                 raptor_state, std::move(q)}
+                                                 raptor_state, std::move(q), false}
         .execute();
   }
 }
