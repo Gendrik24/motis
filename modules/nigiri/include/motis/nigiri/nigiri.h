@@ -5,6 +5,9 @@
 #include <vector>
 
 #include "motis/module/module.h"
+#include "motis/module/subc_reg.h"
+
+#include "motis/core/common/unixtime.h"
 
 namespace motis::nigiri {
 
@@ -22,6 +25,9 @@ struct nigiri : public motis::module::module {
   void import(motis::module::import_dispatcher&) override;
   bool import_successful() const override { return import_successful_; }
 
+  void reg_subc(motis::module::subc_reg&) override;
+
+  void add_reach_store(unixtime start, unixtime end);
 private:
   void register_gtfsrt_timer(motis::module::dispatcher&);
   void update_gtfsrt();

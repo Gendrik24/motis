@@ -6,9 +6,12 @@
 
 #include "conf/date_time.h"
 
+#include "nigiri/types.h"
+#include "tiles/fixed/io/dump.h"
 #include "utl/enumerate.h"
 #include "utl/helpers/algorithm.h"
 #include "utl/verify.h"
+#include "nigiri/common/parse_time.h"
 
 #include "geo/point_rtree.h"
 
@@ -22,7 +25,9 @@
 #include "nigiri/timetable.h"
 
 #include "motis/core/common/logging.h"
+#include "motis/core/common/unixtime.h"
 #include "motis/module/event_collector.h"
+#include "motis/module/message.h"
 #include "motis/nigiri/geo_station_lookup.h"
 #include "motis/nigiri/get_station.h"
 #include "motis/nigiri/gtfsrt.h"
@@ -34,6 +39,7 @@
 #include "motis/nigiri/trip_to_connection.h"
 #include "motis/nigiri/unixtime_conv.h"
 #include "utl/parser/split.h"
+#include "motis/nigiri/eval/reach/commands.h"
 
 namespace fbs = flatbuffers;
 namespace fs = std::filesystem;
@@ -141,6 +147,21 @@ nigiri::nigiri() : module("Next Generation Routing", "nigiri") {
 
 nigiri::~nigiri() = default;
 
+mm::msg_ptr compute_reach(n::timetable& tt,
+                   fs::path dump_file_path,
+                   mm::msg_ptr const& msg) {
+
+  using motis::nigiri::ReachRequest;
+  auto const req = motis_content(ReachRequest, msg);
+
+  const auto start_time = n::parse_time(req->start_time()->str(),"%Y-%m-%d %H:%M %Z");
+  const auto end_time = n::parse_time(req->end_time()->str(), "%Y-%m-%d %H:%M %Z");
+  
+  tt.add_reach_store_for({start_time, end_time});
+  tt.write(dump_file_path);
+  return mm::make_no_msg("/nigiri/build-reach");
+}
+
 void nigiri::init(motis::module::registry& reg) {
   if (!gtfsrt_paths_.empty()) {
     auto const rtt_copy = std::make_shared<n::rt_timetable>(*impl_->get_rtt());
@@ -186,7 +207,21 @@ void nigiri::init(motis::module::registry& reg) {
   reg.register_op("/nigiri",
                   [&](mm::msg_ptr const& msg) {
                     return route(impl_->tags_, **impl_->tt_,
-                                 impl_->get_rtt().get(), msg);
+                                 impl_->get_rtt().get(), msg, false);
+                  },
+                  {});
+
+  reg.register_op("/nigiri-reach",
+                  [&](mm::msg_ptr const& msg) {
+                    return route(impl_->tags_, **impl_->tt_,
+                                 impl_->get_rtt().get(), msg, true);
+                  },
+                  {});
+
+  reg.register_op("/nigiri/build-reach",
+                  [&](mm::msg_ptr const& msg) {
+                    return compute_reach(**impl_->tt_, get_data_directory() / "nigiri" / fmt::to_string(impl_->hash_),
+                                         msg);
                   },
                   {});
 
@@ -339,6 +374,7 @@ void nigiri::import(motis::module::import_dispatcher& reg) {
             "all schedules require a name tag, even with only one schedule");
 
         date::sys_days begin;
+        fmt::print("Begin = {}\n", begin);
         auto const today = std::chrono::time_point_cast<date::days>(
             std::chrono::system_clock::now());
         if (first_day_ == "TODAY") {
@@ -441,6 +477,7 @@ void nigiri::import(motis::module::import_dispatcher& reg) {
           impl_->hash_ = h;
           if (!no_cache_) {
             try {
+              fmt::print("{}\n", dump_file_path.string().c_str());
               impl_->tt_ = std::make_shared<cista::wrapped<n::timetable>>(
                   n::timetable::read(cista::memory_holder{
                       cista::file{dump_file_path.string().c_str(), "r"}
@@ -526,6 +563,10 @@ void nigiri::import(motis::module::import_dispatcher& reg) {
                              });
                            });
       });
+}
+
+void nigiri::reg_subc(motis::module::subc_reg& r) {
+  r.register_cmd("reach", "generate reach stores", eval::reach);
 }
 
 }  // namespace motis::nigiri

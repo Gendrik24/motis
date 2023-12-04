@@ -13,6 +13,7 @@ struct tag_lookup;
 
 motis::module::msg_ptr route(tag_lookup const&, ::nigiri::timetable const&,
                              ::nigiri::rt_timetable const*,
-                             motis::module::msg_ptr const&);
+                             motis::module::msg_ptr const&,
+                             bool use_reach_if_available);
 
 }  // namespace motis::nigiri

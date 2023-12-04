@@ -1,0 +1,6 @@
+namespace motis.nigiri;
+
+table ReachRequest {
+  start_time:string;
+  end_time:string;
+}

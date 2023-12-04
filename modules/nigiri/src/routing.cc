@@ -73,6 +73,12 @@ mm::msg_ptr to_routing_response(
       CreateStatisticsEntry(
           fbb, fbb.CreateString("route_update_prevented_by_lower_bound"),
           raptor_stats.route_update_prevented_by_lower_bound_),
+      CreateStatisticsEntry(
+          fbb, fbb.CreateString("fp_update_prevented_by_reach"),
+          raptor_stats.fp_update_prevented_by_reach_),
+      CreateStatisticsEntry(
+          fbb, fbb.CreateString("route_update_prevented_by_reach"),
+          raptor_stats.route_update_prevented_by_reach_),
       CreateStatisticsEntry(fbb, fbb.CreateString("conversion"),
                             MOTIS_TIMING_MS(conversion))};
   auto statistics = std::vector<fbs::Offset<Statistics>>{
@@ -129,11 +135,12 @@ std::vector<n::routing::offset> get_offsets(
 template <n::direction SearchDir>
 auto run_search(n::routing::search_state& search_state,
                 n::routing::raptor_state& raptor_state, n::timetable const& tt,
-                n::rt_timetable const* rtt, n::routing::query&& q) {
+                n::rt_timetable const* rtt, n::routing::query&& q,
+                bool use_reach_if_available) {
   if (rtt == nullptr) {
     using algo_t = n::routing::raptor<SearchDir, false>;
     return n::routing::search<SearchDir, algo_t>{tt, nullptr, search_state,
-                                                 raptor_state, std::move(q), false}
+                                                 raptor_state, std::move(q), use_reach_if_available}
         .execute();
   } else {
     using algo_t = n::routing::raptor<SearchDir, true>;
@@ -145,7 +152,8 @@ auto run_search(n::routing::search_state& search_state,
 
 motis::module::msg_ptr route(tag_lookup const& tags, n::timetable const& tt,
                              n::rt_timetable const* rtt,
-                             motis::module::msg_ptr const& msg) {
+                             motis::module::msg_ptr const& msg,
+                             bool use_reach_if_available) {
   using motis::routing::RoutingRequest;
   auto const req = motis_content(RoutingRequest, msg);
 
@@ -305,14 +313,14 @@ motis::module::msg_ptr route(tag_lookup const& tags, n::timetable const& tt,
   n::routing::raptor_stats raptor_stats;
   if (req->search_dir() == SearchDir_Forward) {
     auto const r = run_search<n::direction::kForward>(
-        *search_state, *raptor_state, tt, rtt, std::move(q));
+        *search_state, *raptor_state, tt, rtt, std::move(q), use_reach_if_available);
     journeys = r.journeys_;
     search_stats = r.search_stats_;
     raptor_stats = r.algo_stats_;
     search_interval = r.interval_;
   } else {
     auto const r = run_search<n::direction::kBackward>(
-        *search_state, *raptor_state, tt, rtt, std::move(q));
+        *search_state, *raptor_state, tt, rtt, std::move(q), use_reach_if_available);
     journeys = r.journeys_;
     search_stats = r.search_stats_;
     raptor_stats = r.algo_stats_;
