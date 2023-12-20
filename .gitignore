@@ -12,7 +12,7 @@ callgrind.out.*
 /.clangd
 /compile_commands.json
 /.clang-tidy
-
+.cache/**
 # Local settings
 CMakeSettings.json
 config.ini

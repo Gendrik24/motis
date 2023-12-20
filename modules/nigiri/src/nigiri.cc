@@ -23,6 +23,7 @@
 #include "nigiri/rt/gtfsrt_update.h"
 #include "nigiri/rt/rt_timetable.h"
 #include "nigiri/timetable.h"
+#include "nigiri/reach.h"
 
 #include "motis/core/common/logging.h"
 #include "motis/core/common/unixtime.h"
@@ -157,7 +158,7 @@ mm::msg_ptr compute_reach(n::timetable& tt,
   const auto start_time = n::parse_time(req->start_time()->str(),"%Y-%m-%d %H:%M %Z");
   const auto end_time = n::parse_time(req->end_time()->str(), "%Y-%m-%d %H:%M %Z");
   
-  tt.add_reach_store_for({start_time, end_time});
+  add_reach_store_for({start_time, end_time}, tt);
   tt.write(dump_file_path);
   return mm::make_no_msg("/nigiri/build-reach");
 }
@@ -207,14 +208,28 @@ void nigiri::init(motis::module::registry& reg) {
   reg.register_op("/nigiri",
                   [&](mm::msg_ptr const& msg) {
                     return route(impl_->tags_, **impl_->tt_,
-                                 impl_->get_rtt().get(), msg, false);
+                                 impl_->get_rtt().get(), msg, n::reach_mode::kNoReach);
                   },
                   {});
 
   reg.register_op("/nigiri-reach",
                   [&](mm::msg_ptr const& msg) {
                     return route(impl_->tags_, **impl_->tt_,
-                                 impl_->get_rtt().get(), msg, true);
+                                 impl_->get_rtt().get(), msg, n::reach_mode::kTransferTravelTimeRach);
+                  },
+                  {});
+
+  reg.register_op("/nigiri-transfer-reach",
+                  [&](mm::msg_ptr const& msg) {
+                    return route(impl_->tags_, **impl_->tt_,
+                                 impl_->get_rtt().get(), msg, n::reach_mode::kTransferReach);
+                  },
+                  {});
+
+  reg.register_op("/nigiri-travel-time-reach",
+                  [&](mm::msg_ptr const& msg) {
+                    return route(impl_->tags_, **impl_->tt_,
+                                 impl_->get_rtt().get(), msg, n::reach_mode::kTravelTimeReach);
                   },
                   {});
 
@@ -567,6 +582,19 @@ void nigiri::import(motis::module::import_dispatcher& reg) {
 
 void nigiri::reg_subc(motis::module::subc_reg& r) {
   r.register_cmd("reach", "generate reach stores", eval::reach);
+}
+
+void nigiri::list_reach() const {
+  std::shared_ptr<cista::wrapped<n::timetable>> tt_ptr = impl_->tt_;
+  if (tt_ptr == nullptr) {
+    fmt::print("No timetable loaded!\n");
+    return;
+  }
+  const auto& tt = **tt_ptr;
+  fmt::print("{} Reach Stores available{}\n", tt.reach_stores_.size(), tt.reach_stores_.size() > 0U ? ":" : ".");
+  for (std::size_t i = 0U; i < tt.reach_stores_.size(); ++i) {
+    fmt::print("{}\t{}\n", i, tt.reach_stores_[n::reach_store_idx_t{i}].valid_range_);
+  }
 }
 
 }  // namespace motis::nigiri

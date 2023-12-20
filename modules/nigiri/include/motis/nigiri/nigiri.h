@@ -27,7 +27,8 @@ struct nigiri : public motis::module::module {
 
   void reg_subc(motis::module::subc_reg&) override;
 
-  void add_reach_store(unixtime start, unixtime end);
+  void list_reach() const;
+  
 private:
   void register_gtfsrt_timer(motis::module::dispatcher&);
   void update_gtfsrt();

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "motis/module/message.h"
+#include "nigiri/types.h"
 
 namespace nigiri {
 struct timetable;
@@ -14,6 +15,6 @@ struct tag_lookup;
 motis::module::msg_ptr route(tag_lookup const&, ::nigiri::timetable const&,
                              ::nigiri::rt_timetable const*,
                              motis::module::msg_ptr const&,
-                             bool use_reach_if_available);
+                             ::nigiri::reach_mode mode);
 
 }  // namespace motis::nigiri
