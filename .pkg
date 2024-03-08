@@ -97,7 +97,7 @@
 [nigiri]
   url=git@github.com:HendrikSmd/nigiri.git
   branch=reach_transfers
-  commit=b008bd118fbf0650ebaeafdc9e658785bddd6910
+  commit=984cdc7fd41c1ac25c00daee673e165b161cbe3e
 [osmium]
   url=git@github.com:motis-project/libosmium.git
   branch=master

@@ -1,6 +1,7 @@
 namespace motis.nigiri;
 
 table ReachRequest {
+  threads:ulong;
   start_time:string;
   end_time:string;
 }

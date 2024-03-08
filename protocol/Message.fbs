@@ -138,6 +138,7 @@ include "paxforecast/PaxForecastApplyMeasuresResponse.fbs";
 include "paxforecast/PaxForecastMetricsRequest.fbs";
 include "paxforecast/PaxForecastMetricsResponse.fbs";
 include "reach/ReachRequest.fbs";
+include "reach/ReachExtendRequest.fbs";
 
 include "HTTPMessage.fbs";
 
@@ -347,7 +348,8 @@ union MsgContent {
   motis.paxforecast.PaxForecastMetricsResponse                            = 163,
   motis.paxmon.PaxMonCapacityStatusRequest                                = 164,
   motis.paxmon.PaxMonCapacityStatusResponse                               = 165,
-  motis.nigiri.ReachRequest                                               = 166
+  motis.nigiri.ReachRequest                                               = 166,
+  motis.nigiri.ReachExtendRequest                                         = 167,
 }
 
 // Destination Examples:

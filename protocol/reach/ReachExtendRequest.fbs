@@ -1,0 +1,7 @@
+namespace motis.nigiri;
+
+table ReachExtendRequest {
+  threads:ulong;
+  reach_store_idx:ulong;
+  duration:int;
+}

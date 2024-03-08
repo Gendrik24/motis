@@ -158,9 +158,23 @@ mm::msg_ptr compute_reach(n::timetable& tt,
   const auto start_time = n::parse_time(req->start_time()->str(),"%Y-%m-%d %H:%M %Z");
   const auto end_time = n::parse_time(req->end_time()->str(), "%Y-%m-%d %H:%M %Z");
   
-  add_reach_store_for({start_time, end_time}, tt);
+  add_reach_store_for({start_time, end_time}, tt, req->threads());
   tt.write(dump_file_path);
   return mm::make_no_msg("/nigiri/build-reach");
+}
+
+mm::msg_ptr extend_reach(n::timetable& tt,
+                         fs::path dump_file_path,
+                         mm::msg_ptr  const& msg) {
+  using motis::nigiri::ReachExtendRequest;
+  auto const req = motis_content(ReachExtendRequest, msg);
+
+  extend_reach_store_by(n::reach_store_idx_t(req->reach_store_idx()),
+                        n::duration_t(req->duration()),
+                        tt,
+                        req->threads());
+  tt.write(dump_file_path);
+  return mm::make_no_msg("/nigiri/extend-reach");
 }
 
 void nigiri::init(motis::module::registry& reg) {
@@ -208,34 +222,72 @@ void nigiri::init(motis::module::registry& reg) {
   reg.register_op("/nigiri",
                   [&](mm::msg_ptr const& msg) {
                     return route(impl_->tags_, **impl_->tt_,
-                                 impl_->get_rtt().get(), msg, n::reach_mode::kNoReach);
+                                 impl_->get_rtt().get(), msg, n::noReachConfig());
                   },
                   {});
 
   reg.register_op("/nigiri-reach",
                   [&](mm::msg_ptr const& msg) {
                     return route(impl_->tags_, **impl_->tt_,
-                                 impl_->get_rtt().get(), msg, n::reach_mode::kTransferTravelTimeRach);
+                                 impl_->get_rtt().get(), msg,
+                                 {
+                                     .reach_store_idx_ = n::reach_store_idx_t::invalid(),
+                                     .mode_flags_out_ = n::noReach(),
+                                     .reach_scope_in_ = n::reach_scope::kTransport,
+                                     .mode_flags_in_ = n::reach_mode_flags::kTravelTimeReach | n::reach_mode_flags::kTransferReach
+                                 });
                   },
                   {});
 
   reg.register_op("/nigiri-transfer-reach",
                   [&](mm::msg_ptr const& msg) {
                     return route(impl_->tags_, **impl_->tt_,
-                                 impl_->get_rtt().get(), msg, n::reach_mode::kTransferReach);
+                                 impl_->get_rtt().get(), msg,
+                                 {
+                                    .reach_store_idx_ = n::reach_store_idx_t::invalid(),
+                                    .mode_flags_out_ = n::noReach(),
+                                    .reach_scope_in_ = n::reach_scope::kTransport,
+                                    .mode_flags_in_ = n::reach_mode_flags::kTransferReach
+                                  });
                   },
                   {});
 
   reg.register_op("/nigiri-travel-time-reach",
                   [&](mm::msg_ptr const& msg) {
                     return route(impl_->tags_, **impl_->tt_,
-                                 impl_->get_rtt().get(), msg, n::reach_mode::kTravelTimeReach);
+                                 impl_->get_rtt().get(), msg,
+                                 {
+                                     .reach_store_idx_ = n::reach_store_idx_t::invalid(),
+                                     .mode_flags_out_ = n::noReach(),
+                                     .reach_scope_in_ = n::reach_scope::kTransport,
+                                     .mode_flags_in_ = n::reach_mode_flags::kTravelTimeReach
+                                 });
+                  },
+                  {});
+
+  reg.register_op("/nigiri-reach-with-out",
+                  [&](mm::msg_ptr const& msg) {
+                    return route(impl_->tags_, **impl_->tt_,
+                                 impl_->get_rtt().get(), msg,
+                                 {
+                                     .reach_store_idx_ = n::reach_store_idx_t::invalid(),
+                                     .mode_flags_out_ = n::reach_mode_flags::kTravelTimeReach | n::reach_mode_flags::kTransferReach,
+                                     .reach_scope_in_ = n::reach_scope::kTransport,
+                                     .mode_flags_in_ = n::reach_mode_flags::kTravelTimeReach | n::reach_mode_flags::kTransferReach
+                                 });
                   },
                   {});
 
   reg.register_op("/nigiri/build-reach",
                   [&](mm::msg_ptr const& msg) {
                     return compute_reach(**impl_->tt_, get_data_directory() / "nigiri" / fmt::to_string(impl_->hash_),
+                                         msg);
+                  },
+                  {});
+
+  reg.register_op("/nigiri/extend-reach",
+                  [&](mm::msg_ptr const& msg) {
+                    return extend_reach(**impl_->tt_, get_data_directory() / "nigiri" / fmt::to_string(impl_->hash_),
                                          msg);
                   },
                   {});
@@ -591,9 +643,14 @@ void nigiri::list_reach() const {
     return;
   }
   const auto& tt = **tt_ptr;
-  fmt::print("{} Reach Stores available{}\n", tt.reach_stores_.size(), tt.reach_stores_.size() > 0U ? ":" : ".");
+  fmt::print("{} Reach Store(s) available{}\n", tt.reach_stores_.size(), tt.reach_stores_.size() > 0U ? ":" : ".");
   for (std::size_t i = 0U; i < tt.reach_stores_.size(); ++i) {
-    fmt::print("{}\t{}\n", i, tt.reach_stores_[n::reach_store_idx_t{i}].valid_range_);
+    const auto& rs = tt.reach_stores_[n::reach_store_idx_t(i)];
+    fmt::print("{}\t{}\t[compute_time_ms={}, n_journeys_computed={}]\n",
+               i,
+               rs.valid_range_,
+               rs.stats_.compute_time_s_,
+               rs.stats_.n_journeys_computed_);
   }
 }
 
